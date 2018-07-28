@@ -406,7 +406,7 @@ The statistics are put in a associative list.
 
 (defun org-insert-ftrace-sched (sched)
   (let ((head (list (list "End (s)" "Start (s)" "Time to schedule (ms)"
-			  "End state" "Start state")
+			  "End state" "Start state" "End core" "Start core")
 		    'hline))
 	(has-tsc (fevt-tsc (caar sched)))
 	res)
@@ -419,6 +419,8 @@ The statistics are put in a associative list.
 	  (setf new (mapcar (curry 'format (if has-tsc "%.03f" "%.06f")) new))
 	  (nconc new (list (assoc-default 'prev_state (fevt-args (car cur)))))
 	  (nconc new (list (assoc-default 'prev_state (fevt-args (cdr cur)))))
+	  (nconc new (list (fevt-cpu (car cur))))
+	  (nconc new (list (fevt-cpu (cdr cur))))
 	  (when has-tsc
 	    (setcdr new (cons (fevt-tsc (cdr cur)) (cdr new)))
 	    (push (fevt-tsc (car cur)) new))
