@@ -84,7 +84,7 @@
 	   (setq col (round (sqrt ,nb)))
 	   (setq row (round (fceiling (/ ,nb (sqrt ,nb))))))
 	 (format "set multiplot layout %d, %d  font \",12\" %s\n"
-		 row col (concat "title '" ,title "'"))))
+		 row col (concat "title '" (gplot-escape ,title) "'"))))
      (let ((gplot-multiplot t))
        ,@body)
      (gplot-exec "unset multiplot")))
