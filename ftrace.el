@@ -360,7 +360,7 @@ The statistics are put in a associative list.
 			    ,(apply 'mapcar* '+
 				    (mapcar 'cdr (subseq sorted limit))))))
 	     (to-plot (nconc (subseq sorted 0 limit) aggregated)))
-	(gplot-cumulative (format "%s - Sampled period is %d ms"
+	(gplot-cumulative (format "%s - Sampleq period is %.01f ms"
 				  (or title "CPU Load") period)
 			  "Time (s)" "Duration (ms)"
 			  (apply 'mapcar* 'list
