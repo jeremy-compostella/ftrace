@@ -368,18 +368,22 @@ The statistics are put in a associative list.
 				 (mapcar 'cdr to-plot))
 			  (mapcar 'car to-plot))))))
 
+(defun ftrace-plot-cpuload-for-cpu (ftrace-current from until period limit cpu)
+  (interactive (append (ftrace-cpuload-read-params)
+		       (list (read-number "CPU: "))))
+  (cl-flet ((cpu-filter (cpu sched)
+	      (remove-if-not (curry '= cpu) sched
+			     :key '(lambda (x) (fevt-cpu (car x))))))
+    (ftrace-plot-cpuload ftrace-current from until period limit
+			 (delq nil (mapcar (curry #'cpu-filter cpu)
+					   (cdr (ftrace-sched))))
+			 (format "CPU %d" cpu))))
+
 (defun ftrace-plot-cpuload-per-cpu (ftrace-current from until period limit)
   (interactive (ftrace-cpuload-read-params))
   (with-multiplot (length (ftrace-cpus)) "CPU Load Per CPU"
-    (cl-flet ((cpu-filter (cpu sched)
-	       (remove-if-not (curry '= cpu) sched
-			      :key '(lambda (x) (fevt-cpu (car x))))))
-      (dolist (cpu (ftrace-cpus))
-	(with-temp-message (format "CPU %d..." cpu)
-	  (ftrace-plot-cpuload ftrace-current from until period limit
-			       (delq nil (mapcar (curry #'cpu-filter cpu)
-						 (cdr (ftrace-sched))))
-			       (format "CPU %d" cpu)))))))
+    (dolist (cpu (ftrace-cpus))
+      (ftrace-plot-cpuload-for-cpu ftrace-current from until period limit cpu))))
 
 (defun ftrace-plot-sched-freq (ftrace-current regexp from until)
   (interactive (let ((ftrace-current (ftrace-read-current)))
