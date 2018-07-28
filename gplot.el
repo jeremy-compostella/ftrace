@@ -73,6 +73,16 @@
        "set style fill solid border -1"
        (concat "plot " plot-cmd)))
 
+(defvar gplot-assigned-color '())
+(defun gplot-pick-color (name)
+  (let ((assignment (assoc name gplot-assigned-color)))
+    (if assignment
+	(nth (cdr assignment) gplot-palette)
+      (setq gplot-assigned-color
+	    (push (cons name (1+ (apply 'max (append '(-1) (mapcar 'cdr gplot-assigned-color)))))
+		  gplot-assigned-color))
+      (nth (cdar gplot-assigned-color) gplot-palette))))
+
 (defmacro with-multiplot (nb title &rest body)
   (declare (indent 2))
   `(progn
@@ -87,7 +97,8 @@
 		 row col (concat "title '" (gplot-escape ,title) "'"))))
      (let ((gplot-multiplot t))
        ,@body)
-     (gplot-exec "unset multiplot")))
+     (gplot-exec "unset multiplot")
+     (setq gplot-assigned-color '())))
 
 (defun gplot-cumulative (title xlabel ylabel data titles)
   (dolist (line (cdr data))
@@ -107,7 +118,7 @@
     (cl-flet ((format-line (x)
 	        (format "'%s' using 1:%d with filledcurve x1 lc rgbcolor '%s' title '%s'"
 			file (incf i)
-			(nth (% i (length gplot-palette)) gplot-palette) x)))
+			(gplot-pick-color x) x)))
       (gplot title xlabel ylabel (mapconcat #'format-line titles ",\\\n")))))
 
 (defun gplot-plot (title xlabel ylabel data metadata)
