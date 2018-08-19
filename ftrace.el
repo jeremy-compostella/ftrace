@@ -174,7 +174,7 @@ cores."
 		     (read-string "Name: ")
 		     (ftrace-read-parser-type)
 		     (ftrace-read-event-set)))
-  (let* ((ftrace-current (make-fmeta :name name :reference file)))
+  (let ((ftrace-current (make-fmeta :name name :reference file)))
     (with-temp-buffer
       (insert-file-contents file)
       (let ((p (make-progress-reporter "Parsing Events" 0 (point-max)))
