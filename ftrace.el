@@ -66,7 +66,7 @@
   "Convert ARGS string into an associative list.  ARGS must
 contains KEY=VAL pairs."
   (let* ((res '())
-	 (token (split-string args "=" t " "))
+	 (token (split-string (substring args 1) "=" t " "))
 	 (name (intern (car token))))
     (setf token (cdr token))
     (while token
