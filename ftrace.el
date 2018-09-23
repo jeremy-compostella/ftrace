@@ -190,7 +190,7 @@ cores."
     (push ftrace-current ftrace-database)))
 
 (defun fevt-sched-name (pair)
-  (format "%s (%d)" (assoc-default 'next_comm (fevt-args (car pair)))
+  (format "%s (%d)" (assoc-default 'prev_comm (fevt-args (cdr pair)))
 	  (fevt-sched-pid pair)))
 
 (defun fevt-sched-cpu (pair)
@@ -266,7 +266,8 @@ cores."
 	(let ((prev-e (aref start (fevt-cpu e))))
 	  (when prev-e
 	    (push (cons prev-e e)
-		  (gethash (assoc-default 'prev_pid (fevt-args e))
+		  (gethash (sxhash (cons (assoc-default 'prev_pid (fevt-args e))
+					 (assoc-default 'prev_comm (fevt-args e))))
 			   processes))))
 	(aset start (fevt-cpu e) e)))
     (maphash (lambda (key val) (push (nreverse val) res)) processes)
@@ -366,8 +367,10 @@ The statistics are put in a associative list.
 	       (cons (fevt-sched-name (car pair))
 		     (ftrace-sample pair 'fevt-time-spent-ms 'fevt-from
 				    'fevt-until from until period-s))))
-      (let* ((sample (with-temp-message "Sampling..."
-		       (mapcar #'sample-proc (or data (cdr (ftrace-sched))))))
+      (let* ((sched (remove-if (lambda (x) (= (fevt-sched-pid (car x)) 0))
+			       (or data (cdr (ftrace-sched)))))
+	     (sample (with-temp-message "Sampling..."
+		       (mapcar #'sample-proc sched)))
 	     (sorted (with-temp-message "Sorting..."
 		       (cl-sort sample '> :key (lambda (x) (apply '+ (cdr x))))))
 	     (aggregated `(("*Aggregated*" .
