@@ -187,6 +187,8 @@ cores."
 	(progress-reporter-done p)
 	(with-temp-message "Sorting Events..."
 	  (setf (ftrace-events) (cl-sort (ftrace-events) '< :key 'fevt-ts)))))
+    (setq ftrace-database (delete-if (curry 'string= name)
+				     ftrace-database :key 'fmeta-name))
     (push ftrace-current ftrace-database)))
 
 (defun fevt-sched-name (pair)
