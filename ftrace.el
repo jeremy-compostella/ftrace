@@ -279,6 +279,9 @@ cores."
   "List of events."
   (delete-duplicates (mapcar 'fevt-type (ftrace-events))))
 
+(defun ftrace-ps ()
+  (assoc-default 'ps (ftrace-cache)))
+
 (defun ftrace-sample (data valuef fromf untilf from until period)
   "It samples DATA where DATA is a list of objects.  VALUEF is a
 function which return the value of an element of DATA.  FROMF is
@@ -472,6 +475,19 @@ The statistics are put in a associative list.
 	    (push (cons (cdar cur) (caadr cur)) sched)))
 	(setf cur (cdr cur))))
     (org-insert-ftrace-sched (nreverse sched))))
+
+(defun ftrace-load-ps-file (ftrace-current ps-file)
+  (interactive (list (ftrace-read-current)
+		     (read-file-name "PS File: ")))
+  (let ((processes (make-hash-table)))
+    (with-current-buffer (find-file-noselect ps-file)
+      (while (re-search-forward "^[a-z0-9_]+ +\\\([0-9]+\\\) " nil t)
+	(let ((pid (string-to-number (match-string 1))))
+	  (goto-char (line-end-position))
+	  (search-backward " ")
+	  (puthash pid (buffer-substring (point) (line-end-position))
+		   processes))))
+    (push (cons 'ps processes) (ftrace-cache))))
 
 (defsubst curry (function &rest arguments)
   (lexical-let ((function function)
