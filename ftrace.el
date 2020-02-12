@@ -191,9 +191,29 @@ cores."
 				     ftrace-database :key 'fmeta-name))
     (push ftrace-current ftrace-database)))
 
+(defun fevt-sched-search-name (pid)
+  (let ((sched (find pid (ftrace-sched)
+		       :key (lambda (x) (fevt-sched-pid (car x)))
+		       :test '=))
+	(res (list "")))
+    (dolist (pair sched)
+      (setf res (cons (assoc-default 'prev_comm (fevt-args (cdr pair))) res))
+      (setf res (cons (assoc-default 'next_comm (fevt-args (car pair))) res)))
+    (delete-duplicates res :test 'string=)))
+
 (defun fevt-sched-name (pair)
-  (format "%s (%d)" (assoc-default 'prev_comm (fevt-args (cdr pair)))
-	  (fevt-sched-pid pair)))
+  (let* ((name (assoc-default 'prev_comm (fevt-args (cdr pair))))
+	 (pid (fevt-sched-pid pair))
+	 sched-name
+	 (ps-name (when (ftrace-ps) (gethash pid (ftrace-ps)))))
+    (unless ps-name
+      (when (and (> pid 1) (or (string= name "main")
+			       (string= name "init")))
+	(let ((names (fevt-sched-search-name pid)))
+	  (setq names (delete "re-initialized>" names))
+	  (when names
+	    (setf sched-name (car names))))))
+    (format "%s (%d)" (or ps-name sched-name name) pid)))
 
 (defun fevt-sched-cpu (pair)
   (fevt-cpu (car pair)))
