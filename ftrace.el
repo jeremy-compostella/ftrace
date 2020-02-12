@@ -128,7 +128,7 @@ cores."
 (defsubst ftrace-line-parser (event arg-parser)
   (let* ((lb (line-beginning-position))
 	 (event (intern (match-string 1)))
-	 (ts (string-to-number (buffer-substring (+ lb 34) (+ lb 46))))
+	 (ts (string-to-number (buffer-substring (+ lb 34) (line-end-position))))
 	 (tsc nil))
     (unless (floatp ts)
       (setf tsc ts)
