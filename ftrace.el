@@ -281,18 +281,26 @@ cores."
 	  (mapcar (rcurry 'find (ftrace-events) :key 'fevt-cpu :from-end t)
 		  (ftrace-cpus))))
 
+(defcustom ftrace-sched-thread-id
+  '(("PID" . (prev_pid))
+    ("PID+NAME" . (prev_pid prev_comm)))
+  "List of field to uniquely identify a thread.")
+
 (ftrace-defun-cached ftrace-sched
   "Compute a per process list of pair of `sched_switch' events."
   (let ((res '())
 	(processes (make-hash-table))
-	(start (make-vector (1+ (apply 'max (ftrace-cpus))) nil)))
+	(start (make-vector (1+ (apply 'max (ftrace-cpus))) nil))
+	(id (assoc-default (completing-read "ID for thread: "
+					    (mapcar 'car ftrace-sched-thread-id)
+					    nil t (caar ftrace-sched-thread-id))
+			   ftrace-sched-thread-id)))
     (dolist (e (ftrace-events))
       (when (eq 'sched_switch (fevt-type e))
 	(let ((prev-e (aref start (fevt-cpu e))))
 	  (when prev-e
 	    (push (cons prev-e e)
-		  (gethash (sxhash (cons (assoc-default 'prev_pid (fevt-args e))
-					 (assoc-default 'prev_comm (fevt-args e))))
+		  (gethash (sxhash (mapcar (rcurry 'assoc-default (fevt-args e)) id))
 			   processes))))
 	(aset start (fevt-cpu e) e)))
     (maphash (lambda (key val) (push (nreverse val) res)) processes)
