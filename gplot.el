@@ -32,8 +32,8 @@
   "t when currently plot in multiplot mode.")
 
 (defcustom gplot-palette
-  '("#324E72" "#6A3A4C" "#000000" "#1CE6FF" "#FF34FF" "#FF4A46" "#008941"
-    "#006FA6" "#A30059" "#FFDBE5" "#7A4900" "#0000A6" "#63FFAC" "#B79762"
+  '("#324E72" "#6A3A4C" "#7A4900" "#1CE6FF" "#FF34FF" "#FF4A46" "#008941"
+    "#006FA6" "#A30059" "#FFDBE5" "#000000" "#0000A6" "#63FFAC" "#B79762"
     "#004D43" "#8FB0FF" "#997D87" "#5A0007" "#809693" "#FEFFE6" "#1B4400"
     "#4FC601" "#3B5DFF" "#4A3B53" "#FF2F80" "#61615A" "#BA0900" "#6B7900"
     "#00C2A0" "#FFAA92" "#FF90C9" "#B903AA" "#D16100" "#DDEFFF" "#000035"
@@ -59,7 +59,9 @@
     (save-window-excursion
       (gnuplot-send-buffer-to-gnuplot))))
 
-(defun gplot (title xlabel ylabel plot-cmd)
+(defun gplot (title xlabel ylabel plot-cmd &optional plot-settings)
+  (unless gplot-multiplot
+    (setq gplot-assigned-color nil))
   (gplot-exec
       (if gplot-multiplot
 	  ""
@@ -71,13 +73,14 @@
        "set datafile separator \"\\t\""
        "set key invert reverse Left outside"
        "set style fill solid border -1"
+       plot-settings
        (concat "plot " plot-cmd)))
 
 (defvar gplot-assigned-color '())
 (defun gplot-pick-color (name)
   (let ((assignment (assoc name gplot-assigned-color)))
     (if assignment
-	(nth (cdr assignment) gplot-palette)
+	(nth (% (cdr assignment) (length gplot-palette)) gplot-palette)
       (setq gplot-assigned-color
 	    (push (cons name (1+ (apply 'max (append '(-1) (mapcar 'cdr gplot-assigned-color)))))
 		  gplot-assigned-color))
