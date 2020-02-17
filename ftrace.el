@@ -398,23 +398,36 @@ The statistics are put in a associative list.
 
 (defun ftrace-plot-cpuload (ftrace-current from until period limit &optional data title)
   (interactive (ftrace-cpuload-read-params))
-  (let ((period-s (/ period 1000.0)))
-    (cl-flet ((sample-proc (pair)
-	       (cons (fevt-sched-name (car pair))
-		     (ftrace-sample pair 'fevt-time-spent-ms 'fevt-from
-				    'fevt-until from until period-s))))
+  (let ((period-s (/ period 1000.0))
+	(total (* 1000 (- until from))))
+    (cl-flet* ((sample-name (pair spent)
+		(format "%s %0.2f ms (%0.2f%%)"
+			(fevt-sched-name (car pair))
+			spent
+			(/ (* 100 (/ spent total))
+			   (length (ftrace-cpus)))))
+	       (sample-proc (pair)
+		(let ((s (ftrace-sample pair 'fevt-time-spent-ms 'fevt-from
+					'fevt-until from until period-s)))
+
+		  (cons (sample-name pair (apply '+ s)) s))))
       (let* ((sched (remove-if (lambda (x) (= (fevt-sched-pid (car x)) 0))
 			       (or data (cdr (ftrace-sched)))))
 	     (sample (with-temp-message "Sampling..."
 		       (mapcar #'sample-proc sched)))
 	     (sorted (with-temp-message "Sorting..."
 		       (cl-sort sample '> :key (lambda (x) (apply '+ (cdr x))))))
-	     (aggregated `(("*Aggregated*" .
-			    ,(apply 'mapcar* '+
-				    (mapcar 'cdr (subseq sorted limit))))))
+	     (after-limit (delete-if (lambda (x) (= 0 (apply '+ (cdr x))))
+				     (subseq sorted limit) :key 'cdr))
+	     (aggregated `((,(format "*%d Aggregated*" (length after-limit)) .
+			    ,(delete-if 'not
+					(apply 'mapcar* '+
+					       (mapcar 'cdr after-limit))))))
 	     (to-plot (nconc (subseq sorted 0 limit) aggregated)))
 	(gplot-cumulative (format "%s - Sample period is %.01f ms"
-				  (or title "CPU Load") period)
+				  (or title
+				      (format "%s CPU Load" (fmeta-name ftrace-current)))
+				  period)
 			  "Time (s)" "Duration (ms)"
 			  (apply 'mapcar* 'list
 				 (number-sequence from until period-s)
