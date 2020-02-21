@@ -201,6 +201,8 @@ cores."
       (setf res (cons (assoc-default 'next_comm (fevt-args (car pair))) res)))
     (delete-duplicates res :test 'string=)))
 
+(defconst fevt-sched-name-desc "Process Name (PID[/TID])")
+
 (defun fevt-sched-name (pair)
   (let* ((name (assoc-default 'prev_comm (fevt-args (cdr pair))))
 	 (tid (fevt-sched-pid pair))
@@ -396,13 +398,33 @@ The statistics are put in a associative list.
 	  (read-number "Sample period (ms): " 100)
 	  (read-number "Max process: " 30))))
 
+(defun ftrace-group-threads (samples group-fun)
+  (cl-flet* ((sample-pid (s)
+	      (fevt-sched-pid (car s)))
+	     (threads-of (l pair)
+	      (let* ((pid (fevt-sched-pid pair))
+		     (threads (remove-if-not (lambda (x) (= (assoc-default 'pid x) pid))
+					     (ftrace-threads))))
+		(if threads
+		    (mapcar (lambda (x) (find (assoc-default 'tid x) l :key #'sample-pid))
+			    threads)
+		  (list (find pid l :key #'sample-pid))))))
+    (let (res pids)
+      (dolist (s samples)
+	(unless (find (fevt-sched-pid (car s)) pids)
+	  (let ((threads (delq nil (threads-of sample (car s)))))
+	    (setf pids (nconc (mapcar #'sample-pid threads) pids))
+	    (push (cons (car s) (funcall group-fun threads)) res))))
+      res)))
+
 (defun ftrace-plot-cpuload (ftrace-current from until period limit &optional data title)
   (interactive (ftrace-cpuload-read-params))
-  (let ((period-s (/ period 1000.0))
+  (let ((group (y-or-n-p "Group threads by process ?"))
+	(period-s (/ period 1000.0))
 	(total (* 1000 (- until from))))
     (cl-flet* ((sample-name (pair spent)
 		(format "%s %0.2f ms (%0.2f%%)"
-			(fevt-sched-name (car pair))
+			(fevt-sched-name pair)
 			spent
 			(/ (* 100 (/ spent total))
 			   (length (ftrace-cpus)))))
@@ -410,20 +432,26 @@ The statistics are put in a associative list.
 		(let ((s (ftrace-sample pair 'fevt-time-spent-ms 'fevt-from
 					'fevt-until from until period-s)))
 
-		  (cons (sample-name pair (apply '+ s)) s))))
+		  (cons (car pair) s))))
       (let* ((sched (remove-if (lambda (x) (= (fevt-sched-pid (car x)) 0))
 			       (or data (cdr (ftrace-sched)))))
 	     (sample (with-temp-message "Sampling..."
 		       (mapcar #'sample-proc sched)))
+	     (grouped (when group
+			(with-temp-message "Grouping..."
+			  (ftrace-group-threads sample (lambda (threads)
+							(apply 'mapcar* '+ (mapcar 'cdr threads)))))))
 	     (sorted (with-temp-message "Sorting..."
-		       (cl-sort sample '> :key (lambda (x) (apply '+ (cdr x))))))
+		       (cl-sort (or grouped sample) '> :key (lambda (x) (apply '+ (cdr x))))))
 	     (after-limit (delete-if (lambda (x) (= 0 (apply '+ (cdr x))))
 				     (subseq sorted limit) :key 'cdr))
 	     (aggregated `((,(format "*%d Aggregated*" (length after-limit)) .
 			    ,(delete-if 'not
 					(apply 'mapcar* '+
 					       (mapcar 'cdr after-limit))))))
-	     (to-plot (nconc (subseq sorted 0 limit) aggregated)))
+	     (limited (mapc (lambda (x) (setcar x (sample-name (car x) (apply '+ (cdr x)))))
+			    (subseq sorted 0 limit)))
+	     (to-plot (nconc limited aggregated)))
 	(gplot-cumulative (format "%s - Sample period is %.01f ms"
 				  (or title
 				      (format "%s CPU Load" (fmeta-name ftrace-current)))
@@ -444,6 +472,68 @@ The statistics are put in a associative list.
 			 (delq nil (mapcar (curry #'cpu-filter cpu)
 					   (cdr (ftrace-sched))))
 			 (format "CPU %d" cpu))))
+
+(defun org-insert-ftrace-cpuload (ftrace-current from until period limit)
+  (interactive (ftrace-cpuload-read-params))
+  (let ((group-p (y-or-n-p "Group threads by process ?"))
+	(period-s (/ period 1000.0))
+	(total (* 1000 (- until from)))
+	(head (list (list fevt-sched-name-desc "CPU Used (ms)" "%"
+			  "Start" "End")
+		    'hline)))
+    (cl-flet ((sample-proc (pair)
+	       (let ((spent (apply '+ (ftrace-sample pair 'fevt-time-spent-ms
+						     'fevt-from 'fevt-until
+						     from until period-s))))
+		 (cons (car pair)
+		       (list spent (fevt-from (car pair))
+			     (fevt-until (car (last pair)))))))
+	      (group (threads)
+	       (list (apply '+ (mapcar 'cadr threads))
+		     (apply 'min (mapcar 'caddr threads))
+		     (apply 'max (mapcar 'cadddr threads)))))
+      (let* ((sched (remove-if (lambda (x) (= (fevt-sched-pid (car x)) 0))
+			       (cdr (ftrace-sched))))
+	     (sample (with-temp-message "Sampling..."
+		       (mapcar #'sample-proc sched)))
+	     (grouped (when group-p
+			(with-temp-message "Grouping threads..."
+			  (ftrace-group-threads sample #'group))))
+	     (sorted (with-temp-message "Sorting..."
+		       (cl-sort (or grouped sample) '> :key 'cadr)))
+	     (limited (if (= -1 limit)
+			    sorted
+			(subseq sorted 0 limit)))
+	     (to-insert (mapcar (lambda (x)
+				  (list (fevt-sched-name (car x))
+					(format "%.3f" (cadr x))
+					(format "%.3f" (/ (* 100 (/ (cadr x) total))
+							  (length (ftrace-cpus))))
+					(format "%.3f" (caddr x))
+					(format "%.3f" (cadddr x))))
+				limited)))
+	(insert (format "#+caption: %s CPU Load between %ds and %ds\n"
+			(fmeta-name ftrace-current) from until)
+		(orgtbl-to-orgtbl (append head to-insert)
+				  '(:fmt "%s")) "\n")))))
+
+(defun ftrace-free-cpu-bandwidth (ftrace-current from until)
+  (interactive (let ((ftrace-current (ftrace-read-current)))
+		 (list ftrace-current
+		       (ftrace-read-from-ts) (ftrace-read-until-ts))))
+  (let ((period-s (/ 100 1000.0))
+	(total (* (length (ftrace-cpus)) 1000 (- until from))))
+    (cl-flet ((sample-proc (pair)
+	       (apply '+ (ftrace-sample pair 'fevt-time-spent-ms 'fevt-from
+					'fevt-until from until period-s))))
+      (let* ((sched (remove-if (lambda (x) (= (fevt-sched-pid (car x)) 0))
+			       (cdr (ftrace-sched))))
+	     (sample (with-temp-message "Sampling..."
+		       (mapcar #'sample-proc sched))))
+	(message "%0.3f ms (%0.3f%%) of free CPU bandwidth between %ds and %ds on %s"
+		 (- total (apply '+ sample))
+		 (* 100 (/ (- total (apply '+ sample)) total))
+		 from until (fmeta-name ftrace-current))))))
 
 (defun ftrace-plot-cpuload-per-cpu (ftrace-current from until period limit)
   (interactive (ftrace-cpuload-read-params))
